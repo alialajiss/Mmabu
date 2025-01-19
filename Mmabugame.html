@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MMABU Game with Levels</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(to right, #e6e6fa, #ffb6c1, #fffacd);
+        }
+
+        #intro-container, #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border: 2px solid #333;
+            padding: 20px;
+            background: linear-gradient(to right, #ff8c00, #ffd700, #ffffe0);
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        #game-info {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        #game-board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            gap: 2px;
+            border: 2px solid #333;
+            padding: 10px;
+            background: linear-gradient(to right, #008080, #00ffff, #90ee90);
+        }
+
+        .candy {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+        }
+
+        button, #player-name-input {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #congratulations-message {
+            margin-top: 20px;
+            font-size: 18px;
+            color: green;
+            display: none;
+        }
+
+        @media (max-width: 600px) {
+            #game-board {
+                grid-template-columns: repeat(8, 30px);
+                grid-template-rows: repeat(8, 30px);
+            }
+
+            .candy {
+                width: 30px;
+                height: 30px;
+                font-size: 1.5rem;
+            }
+
+            button, #player-name-input {
+                font-size: 14px;
+                padding: 8px 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="music-selection-container">
+        <label for="music-select">Music:</label>
+        <select id="music-select">
+            <option value="background-music1.mp3">Music 1</option>
+            <option value="background-music2.mp3">Music 2</option>
+            <option value="background-music3.mp3">Music 3</option>
+        </select>
+    </div>
+
+    <audio id="background-music" loop></audio>
+    <audio id="level-complete-sound" src="level-complete.mp3" preload="auto"></audio>
+
+    <div id="intro-container">
+        <div id="intro-step-1">
+            <h2>MMABU GAME!</h2>
+            <p>This is a fun and interactive game where you match three or more emojis to clear them from the board. The more matches you make, the higher your score!</p>
+            <button id="next-button-1">Next</button>
+        </div>
+        <div id="intro-step-2" style="display: none;">
+            <h2>How to Play</h2>
+            <p>Drag and drop the emojis to swap them. Match three or more emojis in a row or column to clear them. Special matches can create bombs that clear more emojis!</p>
+            <button id="next-button-2">Next</button>
+        </div>
+        <div id="intro-step-3" style="display: none;">
+            <h2>Enter Your Name</h2>
+            <input type="text" id="player-name-input" placeholder="Enter your name">
+            <button id="start-button">Start Game</button>
+        </div>
+    </div>
+
+    <div id="game-container" style="display: none;">
+        <div id="game-info">
+            <div id="player-name">Player: <span id="player-name-text"></span></div>
+            <div id="current-level">Level: <span id="level-count">1</span></div>
+            <div id="level-objective">Objective: <span id="objective-text">Match 15 candies</span></div>
+            <div id="time-left">Time Left: <span id="time-left-count">60</span> seconds</div>
+            <div id="matches-count">Matches: <span id="matches-count-text">0</span></div>
+        </div>
+        <div id="game-board"></div>
+        <button id="pause-button">Pause Game</button>
+        <button id="settings-button">⚙️</button>
+        <button id="level-selection-button">Select Level</button>
+        <div id="congratulations-message"></div>
+    </div>
+
+    <script>
+        const candyEmojis = ['🍒', '🍋', '🍊', '🍇', '🍉', '🍓'];
+        const bombEmoji = '💣';
+        const grid = [];
+        const width = 8;
+        const gameBoard = document.getElementById('game-board');
+        const startButton = document.getElementById('start-button');
+        const nextButton1 = document.getElementById('next-button-1');
+        const nextButton2 = document.getElementById('next-button-2');
+        const playerNameInput = document.getElementById('player-name-input');
+        const playerNameText = document.getElementById('player-name-text');
+        const levelCount = document.getElementById('level-count');
+        const objectiveText = document.getElementById('objective-text');
+        const congratulationsMessage = document.getElementById('congratulations-message');
+        const timeLeftCount = document.getElementById('time-left-count');
+        const matchesCountText = document.getElementById('matches-count-text');
+        const pauseButton = document.getElementById('pause-button');
+        const levelCompleteSound = document.getElementById('level-complete-sound');
+        const backgroundMusic = document.getElementById('background-music');
+        const settingsButton = document.getElementById('settings-button');
+        const levelSelectionButton = document.getElementById('level-selection-button');
+
+        let gameStarted = false;
+        let gamePaused = false;
+        let currentLevel = 1;
+        let levelObjective = "Match 15 candies";
+        let matchesCount = 0;
+        let timeLeft = 60;
+        let timer;
+
+        // Background music event listener for selection
+        const musicSelect = document.getElementById('music-select');
+        musicSelect.addEventListener('change', (event) => {
+            backgroundMusic.src = event.target.value;
+            backgroundMusic.play();
+        });
+
+        // Initialize the game
+        function initializeGame() {
+            createBoard();
+            addEventListeners();
+            updateUI();
+            startTimer();
+        }
+
+        // Create the game board
+        function createBoard() {
+            gameBoard.innerHTML = '';
+            grid.length = 0;
+            for (let i = 0; i < width * width; i++) {
+                const candy = document.createElement('div');
+                candy.setAttribute('draggable', true);
+                candy.setAttribute('id', i);
+                candy.classList.add('candy');
+                let randomEmoji = candyEmojis[Math.floor(Math.random() * candyEmojis.length)];
+                candy.textContent = randomEmoji;
+                gameBoard.appendChild(candy);
+                grid.push(candy);
+            }
+            blinkEmojis();
+        }
+
+        // Add event listeners to the candies
+        function addEventListeners() {
+            grid.forEach(candy => candy.addEventListener('dragstart', dragStart));
+            grid.forEach(candy => candy.addEventListener('dragend', dragEnd));
+            grid.forEach(candy => candy.addEventListener('dragover', dragOver));
+            grid.forEach(candy => candy.addEventListener('dragenter', dragEnter));
+            grid.forEach(candy => candy.addEventListener('dragleave', dragLeave));
+            grid.forEach(candy => candy.addEventListener('drop', dragDrop));
+        }
+
+        // Variables for dragging
+        let emojiBeingDragged, emojiBeingReplaced;
+        let squareIdBeingDragged, squareIdBeingReplaced;
+
+        // Drag and drop functions
+        function dragStart(e) {
+            emojiBeingDragged = e.target.textContent;
+            squareIdBeingDragged = parseInt(e.target.id);
+        }
+
+        function dragEnd() {
+            let validMoves = [
+                squareIdBeingDragged - 1,
+                squareIdBeingDragged - width,
+                squareIdBeingDragged + 1,
+                squareIdBeingDragged + width
+            ];
+            let validMove = validMoves.includes(squareIdBeingReplaced);
+
+            if (squareIdBeingReplaced && validMove) {
+                squareIdBeingReplaced = null;
+                checkForMatches();
+                updateUI();
+            } else if (squareIdBeingReplaced && !validMove) {
+                grid[squareIdBeingReplaced].textContent = emojiBeingReplaced;
+                grid[squareIdBeingDragged].textContent = emojiBeingDragged;
+            } else {
+                grid[squareIdBeingDragged].textContent = emojiBeingDragged;
+            }
+            squareIdBeingReplaced = null;
+        }
+
+        function dragOver(e) {
+            e.preventDefault();
+        }
+
+        function dragEnter(e) {
+            e.preventDefault();
+        }
+
+        function dragLeave() {}
+
+        function dragDrop(e) {
+            emojiBeingReplaced = e.target.textContent;
+            squareIdBeingReplaced = parseInt(e.target.id);
+            e.target.textContent = emojiBeingDragged;
+            grid[squareIdBeingDragged].textContent = emojiBeingReplaced;
+        }
+
+        // Check for matches
+        function checkForMatches() {
+            checkRowForFour();
+            checkRowForThree();
+            checkColumnForFour();
+            checkColumnForThree();
+            refillBoard();
+            checkLevelCompletion();
+        }
+
+        function checkRowForFour() {
+            for (let i = 0; i <= 60; i++) {
+                let rowOfFour = [i, i + 1, i + 2, i + 3];
+                let decidedEmoji = grid[i].textContent;
+                const isBlank = grid[i].textContent === '';
+
+                if (rowOfFour.every(index => grid[index].textContent === decidedEmoji && !isBlank)) {
+                    matchesCount++;
+                    rowOfFour.forEach(index => {
+                        grid[index].textContent = bombEmoji;
+                    });
+                    triggerBomb(i);
+                }
+            }
+        }
+
+        function checkColumnForFour() {
+            for (let i = 0; i <= 39; i++) {
+                let columnOfFour = [i, i + width, i + width * 2, i + width * 3];
+                let decidedEmoji = grid[i].textContent;
+                const isBlank = grid[i].textContent === '';
+
+                if (columnOfFour.every(index => grid[index].textContent === decidedEmoji && !isBlank)) {
+                    matchesCount++;
+                    columnOfFour.forEach(index => {
+                        grid[index].textContent = bombEmoji;
+                    });
+                    triggerBomb(i);
+                }
+            }
+        }
+
+        function checkRowForThree() {
+            for (let i = 0; i <= 61; i++) {
+                let rowOfThree = [i, i + 1, i + 2];
+                let decidedEmoji = grid[i].textContent;
+                const isBlank = grid[i].textContent === '';
+
+                if (rowOfThree.every(index => grid[index].textContent === decidedEmoji && !isBlank)) {
+                    matchesCount++;
+                    rowOfThree.forEach(index => {
+                        grid[index].textContent = '';
+                    });
+                }
+            }
+        }
+
+        function checkColumnForThree() {
+            for (let i = 0; i <= 47; i++) {
+                let columnOfThree = [i, i + width, i + width * 2];
+                let decidedEmoji = grid[i].textContent;
+                const isBlank = grid[i].textContent === '';
+
+                if (columnOfThree.every(index => grid[index].textContent === decidedEmoji && !isBlank)) {
+                    matchesCount++;
+                    columnOfThree.forEach(index => {
+                        grid[index].textContent = '';
+                    });
+                }
+            }
+        }
+
+        // Trigger bomb effect
+        function triggerBomb(index) {
+            const bombEffectArea = [
+                index, index + 1, index + 2, index + 3,
+                index + width, index + width + 1, index + width + 2, index + width + 3,
+                index + width * 2, index + width * 2 + 1, index + width * 2 + 2, index + width * 2 + 3,
+                index + width * 3, index + width * 3 + 1, index + width * 3 + 2, index + width * 3 + 3
+            ];
+
+            bombEffectArea.forEach(idx => {
+                if (idx < width * width) {
+                    grid[idx].textContent = '';
+                }
+            });
+        }
+
+        // Refill the board with new emojis
+        function refillBoard() {
+            for (let i = 0; i < 64; i++) {
+                if (grid[i].textContent === '') {
+                    let randomEmoji = candyEmojis[Math.floor(Math.random() * candyEmojis.length)];
+                    grid[i].textContent = randomEmoji;
+                }
+            }
+            addEventListeners();
+        }
+
+        // Check if the level is completed
+        function checkLevelCompletion() {
+            if (matchesCount >= 15) {
+                gamePaused = true;
+                showCongratulationsMessage();
+                levelCompleteSound.play();
+            }
+        }
+
+        // Show congratulations message
+        function showCongratulationsMessage() {
+            congratulationsMessage.textContent = `Congratulations ${playerNameText.textContent}! You've completed Level ${currentLevel}`;
+            congratulationsMessage.style.display = 'block';
+            setTimeout(() => {
+                congratulationsMessage.style.display = 'none';
+                if (currentLevel < 10) {
+                    currentLevel++;
+                    levelObjective = `Match 15 candies`;
+                    matchesCount = 0;
+                    timeLeft = 60;
+                    gamePaused = false;
+                    updateUI();
+                    createBoard();
+                } else {
+                    levelObjective = "You have completed all levels!";
+                    gameStarted = false;
+                    startButton.style.display = 'block';
+                    clearInterval(timer);
+                }
+            }, 3000);
+        }
+
+        // Update the UI
+        function updateUI() {
+            levelCount.textContent = currentLevel;
+            objectiveText.textContent = levelObjective;
+            matchesCountText.textContent = matchesCount;
+            timeLeftCount.textContent = timeLeft;
+        }
+
+        // Start the game timer
+        function startTimer() {
+            timer = setInterval(() => {
+                if (!gamePaused) {
+                    timeLeft--;
+                    timeLeftCount.textContent = timeLeft;
+                    if (timeLeft <= 0) {
+                        alert('Time Up! Try Again');
+                        resetLevel();
+                    }
+                }
+            }, 1000);
+        }
+
+        // Reset the level
+        function resetLevel() {
+            matchesCount = 0;
+            timeLeft = 60;
+            createBoard();
+            updateUI();
+        }
+
+        // Event Listeners for Intro Steps and Start Button
+        nextButton1.addEventListener('click', () => {
+            document.getElementById('intro-step-1').style.display = 'none';
+            document.getElementById('intro-step-2').style.display = 'block';
+        });
+
+        nextButton2.addEventListener('click', () => {
+            document.getElementById('intro-step-2').style.display = 'none';
+            document.getElementById('intro-step-3').style.display = 'block';
+        });
+
+        startButton.addEventListener('click', () => {
+            const playerName = playerNameInput.value.trim();
+            if (playerName) {
+                playerNameText.textContent = playerName;
+                playerNameInput.style.display = 'none';
+                startButton.style.display = 'none';
+                document.getElementById('intro-container').style.display = 'none';
+                document.getElementById('game-container').style.display = 'flex';
+                gameStarted = true;
+                initializeGame();
+            } else {
+                alert('Please enter your name to start the game.');
+            }
+        });
+
+        // Pause and resume the game
+        pauseButton.addEventListener('click', () => {
+            gamePaused = !gamePaused;
+            pauseButton.textContent = gamePaused ? 'Resume Game' : 'Pause Game';
+        });
+
+        // Blink emojis
+        function blinkEmojis() {
+            const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'];
+            setInterval(() => {
+                grid.forEach(candy => {
+                    const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                    candy.style.backgroundColor = candy.style.backgroundColor === randomColor ? 'transparent' : randomColor;
+                });
+            }, 500);
+        }
+
+        // Settings button functionality
+        settingsButton.addEventListener('click', () => {
+            const newName = prompt('Enter new player name:', playerNameText.textContent);
+            if (newName) {
+                playerNameText.textContent = newName;
+            }
+        });
+    </script>
+</body>
+</html>
